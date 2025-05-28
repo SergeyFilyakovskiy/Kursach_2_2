@@ -1,0 +1,26 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/riskdb
+    username: postgres
+    password: ruhubo
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  security:
+    user:
+      name: admin
+      password: admin
+
+logging:
+  level:
+    org.springframework.web: DEBUG
+    org.hibernate.tool.hbm2ddl: ERROR
+
+server:
+  port: 8080

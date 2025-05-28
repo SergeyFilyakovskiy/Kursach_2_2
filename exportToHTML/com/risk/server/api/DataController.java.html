@@ -1,0 +1,101 @@
+<html>
+<head>
+<title>DataController.java</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cf8e6d;}
+.s1 { color: #bcbec4;}
+.s2 { color: #bcbec4;}
+.s3 { color: #6aab73;}
+.s4 { color: #5f826b; font-style: italic;}
+.s5 { color: #7a7e85;}
+</style>
+</head>
+<body bgcolor="#1e1f22">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+DataController.java</font>
+</center></td></tr></table>
+<pre><span class="s0">package </span><span class="s1">com</span><span class="s2">.</span><span class="s1">risk</span><span class="s2">.</span><span class="s1">server</span><span class="s2">.</span><span class="s1">api</span><span class="s2">;</span>
+
+<span class="s0">import </span><span class="s1">com</span><span class="s2">.</span><span class="s1">risk</span><span class="s2">.</span><span class="s1">server</span><span class="s2">.</span><span class="s1">dto</span><span class="s2">.</span><span class="s1">DatasetDto</span><span class="s2">;</span>
+<span class="s0">import </span><span class="s1">com</span><span class="s2">.</span><span class="s1">risk</span><span class="s2">.</span><span class="s1">server</span><span class="s2">.</span><span class="s1">dto</span><span class="s2">.</span><span class="s1">HistoricalDataDto</span><span class="s2">;</span>
+<span class="s0">import </span><span class="s1">com</span><span class="s2">.</span><span class="s1">risk</span><span class="s2">.</span><span class="s1">server</span><span class="s2">.</span><span class="s1">dto</span><span class="s2">.</span><span class="s1">ValidationErrorDto</span><span class="s2">;</span>
+<span class="s0">import </span><span class="s1">com</span><span class="s2">.</span><span class="s1">risk</span><span class="s2">.</span><span class="s1">server</span><span class="s2">.</span><span class="s1">model</span><span class="s2">.</span><span class="s1">DailyReturn</span><span class="s2">;</span>
+<span class="s0">import </span><span class="s1">com</span><span class="s2">.</span><span class="s1">risk</span><span class="s2">.</span><span class="s1">server</span><span class="s2">.</span><span class="s1">service</span><span class="s2">.</span><span class="s1">DataService</span><span class="s2">;</span>
+<span class="s0">import </span><span class="s1">com</span><span class="s2">.</span><span class="s1">risk</span><span class="s2">.</span><span class="s1">server</span><span class="s2">.</span><span class="s1">service</span><span class="s2">.</span><span class="s1">ValidationService</span><span class="s2">;</span>
+<span class="s0">import </span><span class="s1">org</span><span class="s2">.</span><span class="s1">springframework</span><span class="s2">.</span><span class="s1">http</span><span class="s2">.</span><span class="s1">MediaType</span><span class="s2">;</span>
+<span class="s0">import </span><span class="s1">org</span><span class="s2">.</span><span class="s1">springframework</span><span class="s2">.</span><span class="s1">web</span><span class="s2">.</span><span class="s1">bind</span><span class="s2">.</span><span class="s1">annotation</span><span class="s2">.*;</span>
+<span class="s0">import </span><span class="s1">org</span><span class="s2">.</span><span class="s1">springframework</span><span class="s2">.</span><span class="s1">web</span><span class="s2">.</span><span class="s1">multipart</span><span class="s2">.</span><span class="s1">MultipartFile</span><span class="s2">;</span>
+<span class="s0">import </span><span class="s1">java</span><span class="s2">.</span><span class="s1">util</span><span class="s2">.</span><span class="s1">List</span><span class="s2">;</span>
+
+<span class="s1">@RestController</span>
+<span class="s1">@RequestMapping</span><span class="s2">(</span><span class="s3">&quot;/api/data&quot;</span><span class="s2">)</span>
+<span class="s0">public class </span><span class="s1">DataController </span><span class="s2">{</span>
+
+    <span class="s0">private final </span><span class="s1">DataService dataSvc</span><span class="s2">;</span>
+    <span class="s0">private final </span><span class="s1">ValidationService valSvc</span><span class="s2">;</span>
+
+    <span class="s0">public </span><span class="s1">DataController</span><span class="s2">(</span><span class="s1">DataService dataSvc</span><span class="s2">,</span>
+                          <span class="s1">ValidationService valSvc</span><span class="s2">) {</span>
+        <span class="s0">this</span><span class="s2">.</span><span class="s1">dataSvc </span><span class="s2">= </span><span class="s1">dataSvc</span><span class="s2">;</span>
+        <span class="s0">this</span><span class="s2">.</span><span class="s1">valSvc  </span><span class="s2">= </span><span class="s1">valSvc</span><span class="s2">;</span>
+    <span class="s2">}</span>
+
+    <span class="s4">/** 1) загрузка CSV → новый Dataset + DailyReturn */</span>
+    <span class="s1">@PostMapping</span><span class="s2">(</span><span class="s3">&quot;/upload&quot;</span><span class="s2">)</span>
+    <span class="s0">public </span><span class="s1">DatasetDto upload</span><span class="s2">(</span><span class="s1">@RequestParam</span><span class="s2">(</span><span class="s3">&quot;file&quot;</span><span class="s2">) </span><span class="s1">MultipartFile file</span><span class="s2">) </span><span class="s0">throws </span><span class="s1">Exception </span><span class="s2">{</span>
+        <span class="s0">return </span><span class="s1">dataSvc</span><span class="s2">.</span><span class="s1">createDataset</span><span class="s2">(</span><span class="s1">file</span><span class="s2">);</span>
+    <span class="s2">}</span>
+
+    <span class="s4">/** 2) список загруженных CSV */</span>
+    <span class="s1">@GetMapping</span><span class="s2">(</span><span class="s3">&quot;/datasets&quot;</span><span class="s2">)</span>
+    <span class="s0">public </span><span class="s1">List</span><span class="s2">&lt;</span><span class="s1">DatasetDto</span><span class="s2">&gt; </span><span class="s1">listDatasets</span><span class="s2">() {</span>
+        <span class="s0">return </span><span class="s1">dataSvc</span><span class="s2">.</span><span class="s1">listDatasets</span><span class="s2">();</span>
+    <span class="s2">}</span>
+    <span class="s4">/** 3) доходности (с ценами!) для одного Dataset */</span>
+    <span class="s1">@GetMapping</span><span class="s2">(</span>
+            <span class="s1">path     </span><span class="s2">= </span><span class="s3">&quot;/{datasetId}&quot;</span><span class="s2">,</span>
+            <span class="s1">produces </span><span class="s2">= </span><span class="s1">MediaType</span><span class="s2">.</span><span class="s1">APPLICATION_JSON_VALUE</span>
+    <span class="s2">)</span>
+    <span class="s0">public </span><span class="s1">List</span><span class="s2">&lt;</span><span class="s1">HistoricalDataDto</span><span class="s2">&gt; </span><span class="s1">listData</span><span class="s2">(</span><span class="s1">@PathVariable Long datasetId</span><span class="s2">) {</span>
+        <span class="s0">return </span><span class="s1">dataSvc</span><span class="s2">.</span><span class="s1">getData</span><span class="s2">(</span><span class="s1">datasetId</span><span class="s2">).</span><span class="s1">stream</span><span class="s2">()</span>
+                <span class="s2">.</span><span class="s1">map</span><span class="s2">(</span><span class="s1">dr -&gt; </span><span class="s0">new </span><span class="s1">HistoricalDataDto</span><span class="s2">(</span>
+                        <span class="s1">dr</span><span class="s2">.</span><span class="s1">getId</span><span class="s2">(),               </span><span class="s5">// &lt;— вот этот id</span>
+                        <span class="s1">dr</span><span class="s2">.</span><span class="s1">getSymbol</span><span class="s2">(),</span>
+                        <span class="s1">dr</span><span class="s2">.</span><span class="s1">getDate</span><span class="s2">().</span><span class="s1">toString</span><span class="s2">(),</span>
+                        <span class="s1">dr</span><span class="s2">.</span><span class="s1">getPrice</span><span class="s2">(),</span>
+                        <span class="s1">dr</span><span class="s2">.</span><span class="s1">getRet</span><span class="s2">()</span>
+                <span class="s2">))</span>
+                <span class="s2">.</span><span class="s1">toList</span><span class="s2">();</span>
+    <span class="s2">}</span>
+    <span class="s0">private </span><span class="s1">List</span><span class="s2">&lt;</span><span class="s1">HistoricalDataDto</span><span class="s2">&gt; </span><span class="s1">mapToDto</span><span class="s2">(</span><span class="s1">List</span><span class="s2">&lt;</span><span class="s1">DailyReturn</span><span class="s2">&gt; </span><span class="s1">list</span><span class="s2">) {</span>
+        <span class="s0">return </span><span class="s1">list</span><span class="s2">.</span><span class="s1">stream</span><span class="s2">()</span>
+                <span class="s2">.</span><span class="s1">map</span><span class="s2">(</span><span class="s1">dr -&gt; </span><span class="s0">new </span><span class="s1">HistoricalDataDto</span><span class="s2">(</span>
+                        <span class="s1">dr</span><span class="s2">.</span><span class="s1">getId</span><span class="s2">(),</span>
+                        <span class="s1">dr</span><span class="s2">.</span><span class="s1">getSymbol</span><span class="s2">(),</span>
+                        <span class="s1">dr</span><span class="s2">.</span><span class="s1">getDate</span><span class="s2">().</span><span class="s1">toString</span><span class="s2">(),</span>
+                        <span class="s1">dr</span><span class="s2">.</span><span class="s1">getPrice</span><span class="s2">(),</span>
+                        <span class="s1">dr</span><span class="s2">.</span><span class="s1">getRet</span><span class="s2">()))</span>
+                <span class="s2">.</span><span class="s1">toList</span><span class="s2">();</span>
+    <span class="s2">}</span>
+    <span class="s1">@GetMapping</span><span class="s2">(</span><span class="s1">produces </span><span class="s2">= </span><span class="s1">MediaType</span><span class="s2">.</span><span class="s1">APPLICATION_JSON_VALUE</span><span class="s2">)</span>
+    <span class="s0">public </span><span class="s1">List</span><span class="s2">&lt;</span><span class="s1">HistoricalDataDto</span><span class="s2">&gt; </span><span class="s1">listDataByParam</span><span class="s2">(</span><span class="s1">@RequestParam</span><span class="s2">(</span><span class="s3">&quot;datasetId&quot;</span><span class="s2">) </span><span class="s1">Long datasetId</span><span class="s2">) {</span>
+        <span class="s1">System</span><span class="s2">.</span><span class="s1">out</span><span class="s2">.</span><span class="s1">println</span><span class="s2">(</span><span class="s3">&quot;&gt;&gt;&gt; listDataByParam() called with datasetId=&quot; </span><span class="s2">+ </span><span class="s1">datasetId</span><span class="s2">);</span>
+        <span class="s0">return </span><span class="s1">mapToDto</span><span class="s2">(</span><span class="s1">dataSvc</span><span class="s2">.</span><span class="s1">getData</span><span class="s2">(</span><span class="s1">datasetId</span><span class="s2">));</span>
+    <span class="s2">}</span>
+
+    <span class="s4">/** 4) Валидация конкретного датасета */</span>
+    <span class="s1">@GetMapping</span><span class="s2">(</span>
+            <span class="s1">path     </span><span class="s2">= </span><span class="s3">&quot;/{datasetId}/validate&quot;</span><span class="s2">,</span>
+            <span class="s1">produces </span><span class="s2">= </span><span class="s1">MediaType</span><span class="s2">.</span><span class="s1">APPLICATION_JSON_VALUE</span>
+    <span class="s2">)</span>
+    <span class="s0">public </span><span class="s1">List</span><span class="s2">&lt;</span><span class="s1">ValidationErrorDto</span><span class="s2">&gt; </span><span class="s1">validate</span><span class="s2">(</span><span class="s1">@PathVariable Long datasetId</span><span class="s2">) {</span>
+        <span class="s0">return </span><span class="s1">valSvc</span><span class="s2">.</span><span class="s1">validateDataset</span><span class="s2">(</span><span class="s1">datasetId</span><span class="s2">);</span>
+    <span class="s2">}</span>
+
+<span class="s2">}</span>
+</pre>
+</body>
+</html>

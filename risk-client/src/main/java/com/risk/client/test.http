@@ -1,0 +1,10 @@
+curl -u analyst:analyst -H "Content-Type: application/json"
+-d '{"symbol":"AAPL","quantity":100,"lastPrice":175,"valDate":"2025-05-27"}'
+    http://localhost:8080/api/var/position
+POST http://localhost:8080/api/var/position
+Authorization: Basic analyst analyst
+Content-Type: application/json
+
+
+
+
