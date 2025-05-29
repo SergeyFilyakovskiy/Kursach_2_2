@@ -23,7 +23,9 @@ public class LoginDialog {
     }
 
     /* ------ регистрация ------ */
-    public static void showRegister(){
+    public static void showRegister()
+    {
+        System.out.println(">>> showRegister() invoked");
         Dialog<ButtonType> dlg=makeDlg("Регистрация");
         TextField u=new TextField();
         PasswordField p=new PasswordField();

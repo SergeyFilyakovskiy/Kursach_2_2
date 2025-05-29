@@ -102,6 +102,17 @@ public class MainApp extends Application {
         MenuItem register = new MenuItem("Регистрация");
         MenuItem logout   = new MenuItem("Выйти");
         login.setOnAction(e -> { if (LoginDialog.showLogin()) updateUi(); });
+        register.setOnAction(e -> {
+            LoginDialog.showRegister();
+            updateUi();
+        });
+
+        logout.setOnAction(e -> {
+            ApiClient.Session.user = null;
+            ApiClient.Session.pass = null;
+            ApiClient.Session.role = "GUEST";
+            updateUi();
+        });
         logout.setOnAction(e -> {
             ApiClient.Session.user = null;
             ApiClient.Session.pass = null;
@@ -205,6 +216,7 @@ public class MainApp extends Application {
         tableData.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
 
         // 2. Кнопки и ComboBox
+        Button btnVarDataset = new Button("Посчитать VaR");
         btnRefreshDatasets = new Button("Обновить спис-к");
         btnUploadCsv       = new Button("Загрузить CSV");
         cbDatasets         = new ComboBox<>();
@@ -223,13 +235,37 @@ public class MainApp extends Application {
         });
 
         // 3. Раскладка в VBox
-        HBox controls = new HBox(10, btnRefreshDatasets, btnUploadCsv, cbDatasets);
+        HBox controls = new HBox(10, btnRefreshDatasets, btnUploadCsv, cbDatasets, btnVarDataset);
         controls.setPadding(new Insets(10));
         VBox pane = new VBox(10, controls, lblCurrentDataset, tableData);
         pane.setPadding(new Insets(10));
 
         // 4. Действия кнопок
-
+        btnVarDataset.setOnAction(e -> {
+            var ds = cbDatasets.getValue();
+            if (ds == null) {
+                new Alert(Alert.AlertType.WARNING,
+                        "Сначала выберите датасет").showAndWait();
+                return;
+            }
+            try {
+                // получаем сохранённые настройки
+                var cfg = ApiClient.getConfig();
+                BigDecimal varVal = ApiClient.getVarForDataset(
+                        ds.id(), cfg.confidenceLevel(), cfg.horizonDays()
+                );
+                String title = String.format(
+                        "VaR (%.0f%%, %dd):",
+                        cfg.confidenceLevel() * 100, cfg.horizonDays()
+                );
+                new Alert(Alert.AlertType.INFORMATION,
+                        title + " " + varVal).showAndWait();
+            } catch (Exception ex) {
+                new Alert(Alert.AlertType.ERROR,
+                        "Ошибка при расчёте VaR: " + ex.getMessage()
+                ).showAndWait();
+            }
+        });
         // 4.1 Обновить список доступных датасетов
         btnRefreshDatasets.setOnAction(e -> {
             try {
@@ -373,9 +409,7 @@ public class MainApp extends Application {
 
             try {
                 var cfg = ApiClient.getConfig();
-                BigDecimal v = ApiClient.getVar(
-                        sel.id(), ds.id(), cfg.horizonDays()
-                );
+                BigDecimal v = ApiClient.getVarByDataset(ds.id());
                 String title = String.format(
                         "VaR (%.0f%%, %dd)",
                         cfg.confidenceLevel()*100, cfg.horizonDays()

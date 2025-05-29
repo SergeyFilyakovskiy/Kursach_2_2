@@ -1,10 +1,18 @@
-curl -u analyst:analyst -H "Content-Type: application/json"
--d '{"symbol":"AAPL","quantity":100,"lastPrice":175,"valDate":"2025-05-27"}'
-    http://localhost:8080/api/var/position
-POST http://localhost:8080/api/var/position
-Authorization: Basic analyst analyst
-Content-Type: application/json
+###
 
+# curl -v
+#  -u admin:admin
+#  -F file=@/полный/путь/to/data.csv
+#  http://localhost:8080/api/data/upload
+POST http://localhost:8080/api/data/upload
+Authorization: Basic admin admin
+Content-Type: multipart/form-data; boundary=WebAppBoundary
 
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="data.csv"
 
+< \полный\путь\to\data.csv
+--WebAppBoundary--
+
+###
 

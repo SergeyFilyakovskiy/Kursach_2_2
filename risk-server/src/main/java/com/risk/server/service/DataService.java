@@ -11,8 +11,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -20,6 +23,7 @@ import java.util.List;
 
 @Service
 public class DataService {
+
     private final DatasetRepository dsRepo;
     private final DailyReturnRepo    drRepo;
     private final ValidationService  valSvc;
@@ -37,6 +41,10 @@ public class DataService {
      * причём uploadedAt конвертируем в String.
      */
     public DatasetDto createDataset(MultipartFile file) throws Exception {
+        System.out.println(">>> createDataset() called for "
+                + file.getOriginalFilename()
+                + ", size=" + file.getSize());
+        try {
         // 1. сохраняем метаданные
         Dataset ds = new Dataset();
         ds.setName(file.getOriginalFilename());
@@ -55,6 +63,10 @@ public class DataService {
                 ds.getName(),
                 ds.getUploadedAt().toString()    // ← здесь
         );
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            throw ex;
+        }
     }
 
     /**
@@ -86,37 +98,58 @@ public class DataService {
      * Простой CSV-парсер (первая строка — заголовок):
      * symbol,date,price,ret
      */
-    private List<DailyReturn> parseCsvToReturns(MultipartFile file, Long dsId) throws Exception {
+    private List<DailyReturn> parseCsvToReturns(MultipartFile file, Long dsId) throws IOException {
         List<DailyReturn> out = new ArrayList<>();
         BigDecimal prevPrice = null;
 
-        try (var reader = new BufferedReader(new InputStreamReader(file.getInputStream()))) {
-            // пропускаем заголовок
-            String line = reader.readLine();
-            while ((line = reader.readLine()) != null) {
-                var parts = line.split(",", -1);
-                String symbol = parts[0].trim();
-                LocalDate date = LocalDate.parse(parts[1].trim());
-                BigDecimal price = new BigDecimal(parts[2].trim());
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
+            // 1) Пропускаем заголовок
+            String header = reader.readLine();
+            if (header == null) {
+                return out;
+            }
 
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String[] parts = line.split(",", -1);
+                if (parts.length < 4) {
+                    // Некорректная строка
+                    continue;
+                }
+
+                // 2) Считаем колонки в правильном порядке:
+                // parts[0] = id (игнорируем),
+                // parts[1] = symbol,
+                // parts[2] = date,
+                // parts[3] = price
+                String symbol = parts[1].trim();
+                LocalDate date = LocalDate.parse(parts[2].trim());
+                BigDecimal price = new BigDecimal(parts[3].trim());
+
+                // 3) Рассчитываем доходность
                 BigDecimal ret = BigDecimal.ZERO;
                 if (prevPrice != null) {
                     ret = price
                             .subtract(prevPrice)
-                            .divide(prevPrice, BigDecimal.ROUND_HALF_UP);
+                            .divide(prevPrice, 6, RoundingMode.HALF_UP);
                 }
 
+                // 4) Формируем и сохраняем объект
                 DailyReturn dr = new DailyReturn();
                 dr.setDatasetId(dsId);
                 dr.setSymbol(symbol);
                 dr.setDate(date);
                 dr.setPrice(price);
                 dr.setRet(ret);
-
                 out.add(dr);
+
                 prevPrice = price;
             }
         }
+
         return out;
     }
+
+
 }

@@ -4,7 +4,11 @@ spring:
     username: postgres
     password: ruhubo
     driver-class-name: org.postgresql.Driver
-
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 50MB
+      max-request-size: 50MB
   jpa:
     hibernate:
       ddl-auto: update
@@ -21,6 +25,7 @@ logging:
   level:
     org.springframework.web: DEBUG
     org.hibernate.tool.hbm2ddl: ERROR
-
+    org.springframework.web.multipart: DEBUG
+    org.springframework.web.servlet.mvc.method.annotation: DEBUG
 server:
   port: 8080

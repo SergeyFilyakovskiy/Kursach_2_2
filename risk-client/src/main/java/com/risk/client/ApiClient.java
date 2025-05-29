@@ -105,13 +105,19 @@ public class ApiClient
             String uploadedAt
     ) {}
     // 6) VaR по dataset (опционально)
-    public static BigDecimal getVar(long posId, long dsId, int lookback)
-            throws Exception {
-        String uri = BASE + "/var/" + posId +
-                "?datasetId=" + dsId +
-                "&lookback="   + lookback;
-        var r = HTTP.send(req(uri).GET().build(), HttpResponse.BodyHandlers.ofString());
-        if (r.statusCode()!=200) throw new RuntimeException(r.body());
+    public static BigDecimal getVarByDataset(long datasetId) throws Exception {
+        // HTTP GET http://…/api/data/{datasetId}/var
+        HttpResponse<String> r = HTTP.send(
+                HttpRequest.newBuilder(URI.create(BASE + "/data/" + datasetId + "/var"))
+                        .header("Authorization", basicAuth())
+                        .GET()
+                        .build(),
+                HttpResponse.BodyHandlers.ofString()
+        );
+        if (r.statusCode() != 200) {
+            throw new RuntimeException("Error from server: " + r.body());
+        }
+        // r.body() теперь — чистая строка "0.012345"
         return new BigDecimal(r.body());
     }
     // 5) Валидация конкретного датасета
@@ -128,6 +134,8 @@ public class ApiClient
     public static List<HistoricalDataDto> listData(long dsId) throws Exception {
         var r = HTTP.send(req("/data/" + dsId).GET().build(),
                 HttpResponse.BodyHandlers.ofString());
+        System.out.println("HTTP status: " + r.statusCode());
+        System.out.println("RAW JSON: "      + r.body());
         return new ObjectMapper()
                 .registerModule(new JavaTimeModule())
                 .readValue(r.body(),
@@ -185,13 +193,14 @@ public class ApiClient
     /** Сохранить конфигурацию */
     public static boolean updateConfig(CalculationConfigDto cfg) throws Exception {
         String json = new ObjectMapper().writeValueAsString(cfg);
-        HttpRequest req = HttpRequest.newBuilder(URI.create(BASE + "/config"))
-                .header("Authorization", basicAuth())
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(json))
-                .build();
-        int st = HTTP.send(req, HttpResponse.BodyHandlers.discarding()).statusCode();
-        return st == 200;
+        var r = HTTP.send(
+                req("/data/config")
+          .PUT(HttpRequest.BodyPublishers.ofString(json))
+                .header("Content-Type","application/json")
+                .build(),
+                HttpResponse.BodyHandlers.ofString()
+    );
+        return r.statusCode() == 200;
     }
     public static String listFSJson() {
         try {
@@ -204,12 +213,27 @@ public class ApiClient
 
     /** Получить текущую конфигурацию расчёта VaR */
     public static CalculationConfigDto getConfig() throws Exception {
-        HttpRequest req = HttpRequest.newBuilder(URI.create(BASE + "/config"))
-                .header("Authorization", basicAuth())
-                .GET()
-                .build();
-        String json = HTTP.send(req, HttpResponse.BodyHandlers.ofString()).body();
-        return new ObjectMapper().readValue(json, CalculationConfigDto.class);
+        var r = HTTP.send(
+                req("/data/config").GET().build(),
+                HttpResponse.BodyHandlers.ofString()
+    );
+        return new ObjectMapper()
+                .readValue(r.body(), CalculationConfigDto.class);
+    }
+    public static BigDecimal getVarForDataset(
+            long datasetId,
+            double confidenceLevel,
+            int horizonDays
+    ) throws Exception {
+        String path = String.format(
+                "/var/dataset?datasetId=%d&confidenceLevel=%.6f&horizonDays=%d",
+                datasetId, confidenceLevel, horizonDays
+        );
+        HttpRequest req = req(path).GET().build();
+        HttpResponse<String> resp = HTTP.send(
+                req, HttpResponse.BodyHandlers.ofString()
+        );
+        return new BigDecimal(resp.body());
     }
 
     public static String basicAuth() {
@@ -366,26 +390,5 @@ public class ApiClient
                 new TypeReference<List<PositionDto>>() {}
         );
     }
-    public static BigDecimal getVar(long posId, int lookback)
-            throws IOException, InterruptedException
-    {
-        // соберём запрос вида GET /api/var/{posId}?lookback={lookback}
-        HttpRequest req = req("/var/" + posId + "?lookback=" + lookback)
-                .GET().build();
-        HttpResponse<String> r = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
-
-        if (r.statusCode() != 200) {
-            throw new RuntimeException("Error: " + r.body());
-        }
-        return new BigDecimal(r.body());
-    }
-
-    // 2) Упрощённая версия с дефолтным lookback = 250
-    public static BigDecimal getVar(long posId)
-            throws IOException, InterruptedException
-    {
-        return getVar(posId, 250);
-    }
-
 
 }

@@ -22,4 +22,22 @@ public class VaRService {
         BigDecimal position = price.multiply(BigDecimal.valueOf(qty));
         return worst.abs().multiply(position).setScale(2, RoundingMode.HALF_UP);
     }
+    public BigDecimal calcHistoricalVaRByDataset(
+            Long datasetId,
+            double confidenceLevel,
+            int lookbackDays
+    ) {
+        List<BigDecimal> rets = repo.findLatestReturnsByDataset(
+                datasetId, PageRequest.of(0, lookbackDays)
+        );
+        if (rets.size() < lookbackDays) {
+            throw new IllegalStateException("Недостаточно данных для VaR: нужно "
+                    + lookbackDays + ", есть " + rets.size());
+        }
+        Collections.sort(rets);
+        int idx = (int) Math.floor((1 - confidenceLevel) * rets.size());
+        BigDecimal worst = rets.get(idx).abs();
+        // возвращаем как дробь (например 0.05 для 5% VaR)
+        return worst.setScale(6, RoundingMode.HALF_UP);
+    }
 }
