@@ -1,5 +1,6 @@
 package com.risk.server.api;
 
+import com.risk.server.dto.CalculationConfigDto;
 import com.risk.server.dto.DatasetDto;
 import com.risk.server.dto.HistoricalDataDto;
 import com.risk.server.dto.ValidationErrorDto;
@@ -22,16 +23,16 @@ public class DataController {
     private final DataService dataSvc;
     private final ValidationService valSvc;
     private final VaRService varSvc;
-    private final CalculationService cfgSvc;
+    private final CalculationService calcSvc;
 
     public DataController(DataService dataSvc,
                           ValidationService valSvc,
                           VaRService varSvc,
-                          CalculationService cfgSvc) {
+                          CalculationService calcSvc) {
         this.dataSvc = dataSvc;
         this.valSvc  = valSvc;
         this.varSvc  = varSvc;
-        this.cfgSvc  = cfgSvc;
+        this.calcSvc  = calcSvc;
     }
     @PostMapping(path = "/echo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public String echo(@RequestParam("file") MultipartFile file) {
@@ -59,7 +60,7 @@ public class DataController {
     }
     /** 3) доходности (с ценами!) для одного Dataset */
     @GetMapping(
-            path     = "/{datasetId}",
+            path     = "/{datasetId}/history",
             produces = MediaType.APPLICATION_JSON_VALUE
     )
     public List<HistoricalDataDto> listData(@PathVariable("datasetId") Long datasetId) {
@@ -98,20 +99,43 @@ public class DataController {
         return valSvc.validateDataset(datasetId);
     }
     @GetMapping(
-            path     = "/{datasetId}/var",
+            path = "/config",
             produces = MediaType.APPLICATION_JSON_VALUE
     )
-    public BigDecimal varByDataset(
-            @PathVariable Long datasetId
+    public CalculationConfigDto getConfig() {
+        return calcSvc.getConfig();
+    }
+
+    /**
+     * 6) Сохранить (или обновить) настройки расчёта VaR
+     */
+    @PutMapping(
+            path = "/config",
+            consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
+    public CalculationConfigDto updateConfig(@RequestBody CalculationConfigDto cfg) {
+        return calcSvc.updateConfig(cfg);
+    }
+
+    /**
+     * 7) Рассчитать VaR для всего датасета на основе текущих настроек
+     *    Ендпоинт может вернуть, например, просто число (BigDecimal), или обёртку.
+     */
+    @GetMapping(
+            path = "/{datasetId}/var",
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
+    public BigDecimal calculateVaR(
+            @PathVariable("datasetId") Long datasetId
     ) {
-        // а) читаем текущие настройки пользователя
-        var cfg = cfgSvc.getConfig();
-        // б) делегируем в сервис VaR
+        // Сначала получаем из БД ваш конфиг (confidenceLevel + horizonDays)
+        CalculationConfigDto cfg = calcSvc.getConfig();
+        // Дальше вызываем VaRService, который вернёт цифру (например, 0.05 ... процент потерь)
         return varSvc.calcHistoricalVaRByDataset(
                 datasetId,
                 cfg.confidenceLevel(),
                 cfg.horizonDays()
         );
     }
-
 }

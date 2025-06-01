@@ -173,12 +173,24 @@ public class MainApp extends Application {
         // Сохранение
         btnSaveConfig.setOnAction(e -> {
             try {
-                var cfg = new ApiClient.CalculationConfigDto(
-                        cbMethod.getValue(),
-                        spConfidence.getValue(),
-                        spHorizon.getValue()
+                // 1) сначала получаем «текущий» конфиг с сервера,
+                //    чтобы забрать его ID (либо null/−1, если ещё не создавался)
+                ApiClient.CalculationConfigDto existing = ApiClient.getConfig();
+                Long currentId = existing != null ? existing.id() : null;
+
+                // 2) создаём новый DTO, передавая тот же ID, плюс новые поля из UI
+                ApiClient.CalculationConfigDto cfg = new ApiClient.CalculationConfigDto(
+                        currentId,                  // <-- здесь подставляем ID из getConfig()
+                        cbMethod.getValue(),        // String method
+                        spConfidence.getValue(),    // Double confidenceLevel
+                        spHorizon.getValue()        // Integer horizonDays
                 );
-                boolean ok = ApiClient.updateConfig(cfg);
+
+                // 3) шлём на сервер, получаем обновлённый DTO в ответе
+                ApiClient.CalculationConfigDto saved = ApiClient.updateConfig(cfg);
+                boolean ok = (saved != null);
+
+                // 4) показ сообщения об успехе/ошибке
                 new Alert(
                         ok ? AlertType.INFORMATION : AlertType.ERROR,
                         ok ? "Сохранено" : "Ошибка при сохранении"
@@ -251,9 +263,8 @@ public class MainApp extends Application {
             try {
                 // получаем сохранённые настройки
                 var cfg = ApiClient.getConfig();
-                BigDecimal varVal = ApiClient.getVarForDataset(
-                        ds.id(), cfg.confidenceLevel(), cfg.horizonDays()
-                );
+                BigDecimal varVal = ApiClient.getVarByDataset(ds.id());
+
                 String title = String.format(
                         "VaR (%.0f%%, %dd):",
                         cfg.confidenceLevel() * 100, cfg.horizonDays()
@@ -402,25 +413,39 @@ public class MainApp extends Application {
             }
         });
         btnPosAdd.setOnAction(e -> addPosition());
+        // … внутри метода createPosTab(), где у вас уже есть btnPosVar.setOnAction(…) …
         btnPosVar.setOnAction(e -> {
             var sel = tablePos.getSelectionModel().getSelectedItem();
             ApiClient.DatasetDto ds = cbDatasets.getValue();
-            if (sel==null || ds==null) return;
-
+            if (sel == null || ds == null) {
+                return;
+            }
             try {
-                var cfg = ApiClient.getConfig();
+                // 1) Сначала читаем текущие VaR‐настройки с сервера
+                ApiClient.CalculationConfigDto cfg = ApiClient.getConfig();
+
+                // 2) Просим сервер вычислить VaR по выбранному datasetId
                 BigDecimal v = ApiClient.getVarByDataset(ds.id());
+
+                // 3) Показываем Alert, где форматируем строку с использованием cfg.confidenceLevel() и cfg.horizonDays()
                 String title = String.format(
-                        "VaR (%.0f%%, %dd)",
-                        cfg.confidenceLevel()*100, cfg.horizonDays()
+                        "VaR (%.0f%%, %dд)",
+                        cfg.confidenceLevel() * 100,   // например, 95.0
+                        cfg.horizonDays()              // число дней
                 );
                 new Alert(AlertType.INFORMATION,
-                        title + ": " + v + " USD").showAndWait();
-            } catch (Exception ex) {
-                new Alert(AlertType.ERROR, ex.getMessage())
+                        title + ": " + v + " USD")
                         .showAndWait();
+
+            } catch (Exception ex) {
+                new Alert(
+                        AlertType.ERROR,
+                        "Ошибка при расчёте VaR: " + ex.getMessage()
+                ).showAndWait();
             }
         });
+
+
 
 
         HBox box = new HBox(10, btnPosRefresh, btnPosAdd, btnPosVar);

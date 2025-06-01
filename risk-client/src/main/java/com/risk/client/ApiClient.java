@@ -64,7 +64,13 @@ public class ApiClient
             return "error: " + ex.getMessage();
         }
     }
-
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static record CalculationConfigDto(
+            Long id,
+            String method,
+            Double confidenceLevel,
+            Integer horizonDays
+    ) {}
     public record FsDto(Long id, String period, String currency, String source) {}
     public record PositionDto(
             Long      id,
@@ -91,14 +97,6 @@ public class ApiClient
     ) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record CalculationConfigDto(
-            String method,
-            double confidenceLevel,
-            int horizonDays
-
-    ) {}
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
     public record DatasetDto(
             Long   id,
             String name,
@@ -114,11 +112,12 @@ public class ApiClient
                         .build(),
                 HttpResponse.BodyHandlers.ofString()
         );
+        System.out.println(">>> VAR response (status=" + r.statusCode() + "): " + r.body());
         if (r.statusCode() != 200) {
-            throw new RuntimeException("Error from server: " + r.body());
+            throw new RuntimeException("Ошибка от сервера: " + r.body());
         }
-        // r.body() теперь — чистая строка "0.012345"
-        return new BigDecimal(r.body());
+        ObjectMapper om = new ObjectMapper();
+        return om.readValue(r.body(), BigDecimal.class);
     }
     // 5) Валидация конкретного датасета
     public static List<ValidationErrorDto> validateData(long dsId)
@@ -131,16 +130,20 @@ public class ApiClient
                         new TypeReference<List<ValidationErrorDto>>() {});
     }
     // 4) Список доходностей по датасету
-    public static List<HistoricalDataDto> listData(long dsId) throws Exception {
-        var r = HTTP.send(req("/data/" + dsId).GET().build(),
-                HttpResponse.BodyHandlers.ofString());
-        System.out.println("HTTP status: " + r.statusCode());
-        System.out.println("RAW JSON: "      + r.body());
-        return new ObjectMapper()
-                .registerModule(new JavaTimeModule())
-                .readValue(r.body(),
-                        new TypeReference<List<HistoricalDataDto>>() {});
+    public static List<HistoricalDataDto> listData(long datasetId) throws Exception {
+        HttpRequest request = req("/data/" + datasetId + "/history").GET().build();
+        HttpResponse<String> response = HTTP.send(request, HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() != 200) {
+            throw new RuntimeException("Ошибка при listData(): "
+                    + response.statusCode() + " / " + response.body());
+        }
+        return OM.readValue(
+                response.body(),
+                new TypeReference<List<HistoricalDataDto>>() {}
+        );
     }
+
     // 3) Загрузка CSV → DatasetDto
     public static DatasetDto uploadDataset(File f) throws Exception {
         var req = buildMultipartRequest(f);
@@ -191,17 +194,21 @@ public class ApiClient
         );
     }
     /** Сохранить конфигурацию */
-    public static boolean updateConfig(CalculationConfigDto cfg) throws Exception {
-        String json = new ObjectMapper().writeValueAsString(cfg);
-        var r = HTTP.send(
-                req("/data/config")
-          .PUT(HttpRequest.BodyPublishers.ofString(json))
-                .header("Content-Type","application/json")
-                .build(),
-                HttpResponse.BodyHandlers.ofString()
-    );
-        return r.statusCode() == 200;
+    public static CalculationConfigDto updateConfig(CalculationConfigDto cfg) throws Exception {
+        String json = OM.writeValueAsString(cfg);
+        HttpRequest request = req("/data/config")
+                .PUT(HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8))
+                .header("Content-Type", "application/json")
+                .build();
+
+        HttpResponse<String> response = HTTP.send(request, HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() != 200) {
+            throw new RuntimeException("Ошибка при updateConfig(): "
+                    + response.statusCode() + " / " + response.body());
+        }
+        return OM.readValue(response.body(), CalculationConfigDto.class);
     }
+
     public static String listFSJson() {
         try {
             HttpRequest r = req("/fs").GET().build();         // req() — builder с Basic-auth
@@ -213,27 +220,14 @@ public class ApiClient
 
     /** Получить текущую конфигурацию расчёта VaR */
     public static CalculationConfigDto getConfig() throws Exception {
-        var r = HTTP.send(
-                req("/data/config").GET().build(),
-                HttpResponse.BodyHandlers.ofString()
-    );
-        return new ObjectMapper()
-                .readValue(r.body(), CalculationConfigDto.class);
-    }
-    public static BigDecimal getVarForDataset(
-            long datasetId,
-            double confidenceLevel,
-            int horizonDays
-    ) throws Exception {
-        String path = String.format(
-                "/var/dataset?datasetId=%d&confidenceLevel=%.6f&horizonDays=%d",
-                datasetId, confidenceLevel, horizonDays
-        );
-        HttpRequest req = req(path).GET().build();
-        HttpResponse<String> resp = HTTP.send(
-                req, HttpResponse.BodyHandlers.ofString()
-        );
-        return new BigDecimal(resp.body());
+        HttpRequest request = req("/data/config").GET().build();
+        HttpResponse<String> response = HTTP.send(request, HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() != 200) {
+            throw new RuntimeException("Ошибка при getConfig(): "
+                    + response.statusCode() + " / " + response.body());
+        }
+        return OM.readValue(response.body(), CalculationConfigDto.class);
     }
 
     public static String basicAuth() {
@@ -296,70 +290,14 @@ public class ApiClient
             return st==200;
         }catch(Exception e){return false;}
     }
-    public static boolean register(String u,String p){ return register(u,p,"ANALYST"); }
 
-    public class Session {
+    public class Session
+    {
         public static String user  = null;         // null → не вошёл
         public static String pass  = null;
         public static String role  = "GUEST";
     }
 
-
-    public class LoginDialog {
-
-        /* ------ вход ------ */
-        public static boolean showLogin(){
-            Dialog<ButtonType> dlg=makeDlg("Вход");
-            TextField u=new TextField();
-            PasswordField p=new PasswordField();
-            GridPane gp=commonGrid(u,p,null);
-            dlg.getDialogPane().setContent(gp);
-
-            if(dlg.showAndWait().orElse(ButtonType.CANCEL)==ButtonType.OK){
-                String role=ApiClient.login(u.getText(),p.getText());
-                if(role!=null) return true;
-                alert("Неверные данные", Alert.AlertType.ERROR);
-            }
-            return false;
-        }
-
-        /* ------ регистрация ------ */
-        public static void showRegister(){
-            Dialog<ButtonType> dlg=makeDlg("Регистрация");
-            TextField u=new TextField();
-            PasswordField p=new PasswordField();
-            ComboBox<String> role=new ComboBox<>();
-            role.getItems().addAll("ANALYST","ADMIN","GUEST");
-            role.setValue("ANALYST");
-
-            GridPane gp=commonGrid(u,p,role);
-            dlg.getDialogPane().setContent(gp);
-
-            if(dlg.showAndWait().orElse(ButtonType.CANCEL)==ButtonType.OK){
-                boolean ok=ApiClient.register(u.getText(),p.getText(),role.getValue());
-                alert(ok? "Успешно!" : "Логин занят", ok? Alert.AlertType.INFORMATION : Alert.AlertType.ERROR);
-            }
-        }
-
-        /* ---- helpers ---- */
-        private static Dialog<ButtonType> makeDlg(String title){
-            Dialog<ButtonType> d=new Dialog<>();
-            d.setTitle(title);
-            d.getDialogPane().getButtonTypes().addAll(ButtonType.OK,ButtonType.CANCEL);
-            return d;
-        }
-        private static GridPane commonGrid(TextField u,PasswordField p,ComboBox<String> role){
-            GridPane g=new GridPane();
-            g.setHgap(10); g.setVgap(10); g.setPadding(new Insets(20));
-            g.addRow(0,new Label("Логин:"),u);
-            g.addRow(1,new Label("Пароль:"),p);
-            if(role!=null) g.addRow(2,new Label("Роль:"),role);
-            return g;
-        }
-        private static void alert(String msg,Alert.AlertType t){
-            new Alert(t,msg,ButtonType.OK).showAndWait();
-        }
-    }
     public static PositionDto createPosition(String symbol, int qty,
                                              BigDecimal price, String date) {
         try {
